@@ -1,27 +1,34 @@
-import { Message } from 'ai';
+import { ChatRequestOptions, Message } from 'ai';
 import { PreviewMessage, ThinkingMessage } from './message';
 import { useScrollToBottom } from './use-scroll-to-bottom';
 import { Overview } from './overview';
-import { UIBlock } from './block';
-import { Dispatch, memo, SetStateAction } from 'react';
+import { memo } from 'react';
 import { Vote } from '@/lib/db/schema';
+import equal from 'fast-deep-equal';
 
 interface MessagesProps {
   chatId: string;
-  block: UIBlock;
-  setBlock: Dispatch<SetStateAction<UIBlock>>;
   isLoading: boolean;
   votes: Array<Vote> | undefined;
   messages: Array<Message>;
+  setMessages: (
+    messages: Message[] | ((messages: Message[]) => Message[]),
+  ) => void;
+  reload: (
+    chatRequestOptions?: ChatRequestOptions,
+  ) => Promise<string | null | undefined>;
+  isReadonly: boolean;
+  isArtifactVisible: boolean;
 }
 
 function PureMessages({
   chatId,
-  block,
-  setBlock,
   isLoading,
   votes,
   messages,
+  setMessages,
+  reload,
+  isReadonly,
 }: MessagesProps) {
   const [messagesContainerRef, messagesEndRef] =
     useScrollToBottom<HTMLDivElement>();
@@ -38,14 +45,15 @@ function PureMessages({
           key={message.id}
           chatId={chatId}
           message={message}
-          block={block}
-          setBlock={setBlock}
           isLoading={isLoading && messages.length - 1 === index}
           vote={
             votes
               ? votes.find((vote) => vote.messageId === message.id)
               : undefined
           }
+          setMessages={setMessages}
+          reload={reload}
+          isReadonly={isReadonly}
         />
       ))}
 
@@ -61,15 +69,14 @@ function PureMessages({
   );
 }
 
-function areEqual(prevProps: MessagesProps, nextProps: MessagesProps) {
-  if (
-    prevProps.block.status === 'streaming' &&
-    nextProps.block.status === 'streaming'
-  ) {
-    return true;
-  }
+export const Messages = memo(PureMessages, (prevProps, nextProps) => {
+  if (prevProps.isArtifactVisible && nextProps.isArtifactVisible) return true;
 
-  return false;
-}
+  if (prevProps.isLoading !== nextProps.isLoading) return false;
+  if (prevProps.isLoading && nextProps.isLoading) return false;
+  if (prevProps.messages.length !== nextProps.messages.length) return false;
+  if (!equal(prevProps.messages, nextProps.messages)) return false;
+  if (!equal(prevProps.votes, nextProps.votes)) return false;
 
-export const Messages = memo(PureMessages, areEqual);
+  return true;
+});
